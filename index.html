@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="rw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OB shop - Official Store</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 pb-20">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-20 right-4 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-2xl z-50 hidden transition transform duration-300 font-bold text-xs flex items-center gap-2 border border-emerald-400">
+        <span>✓</span> <span id="toast-msg">Igicuruzwa cyongewe muri Cart!</span>
+    </div>
+
+    <!-- Sticky Modern Header -->
+    <header class="bg-slate-900 text-white shadow-xl sticky top-0 z-40 border-b border-slate-800">
+        <div class="max-w-6xl mx-auto px-4 py-3 space-y-2">
+            <!-- Top Row: Brand & Controls -->
+            <div class="flex justify-between items-center gap-2">
+                <!-- Secret Triple-Click on OB Logo to Prompt Password -->
+                <div class="flex items-center gap-2 cursor-pointer select-none" onclick="handleSecretClick()">
+                    <div class="bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black px-3 py-1 rounded-xl text-lg tracking-wider shadow-md">
+                        OB
+                    </div>
+                    <span class="text-xl font-black text-amber-400 tracking-tight">OB shop</span>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                    <!-- Language Switcher -->
+                    <select id="lang-select" onchange="changeLanguage()" class="bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs p-1.5 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="rw">🇷🇼 Kinyarwanda</option>
+                        <option value="en">🇬🇧 English</option>
+                    </select>
+
+                    <!-- Currency Switcher -->
+                    <select id="currency-select" onchange="changeCurrency()" class="bg-slate-800 text-amber-400 border border-slate-700 font-bold text-xs p-1.5 rounded-xl outline-none focus:ring-2 focus:ring-amber-500">
+                        <option value="RWF">RWF</option>
+                        <option value="USD">USD ($)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Prominent Search Bar -->
+            <div class="relative w-full">
+                <input type="text" id="search-input" onkeyup="checkSecretSearch(); renderProducts();" data-i18n-placeholder="search_ph" placeholder="Shakisha ibicuruzwa kuri OB shop..." class="w-full pl-10 pr-4 py-2.5 rounded-2xl text-slate-900 text-sm bg-slate-100 border border-slate-300 shadow-inner focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition">
+                <div class="absolute left-3.5 top-3 text-slate-400">
+                    🔍
+                </div>
+            </div>
+        </div>
+
+        <!-- Scrollable Category Menu Bar -->
+        <nav class="bg-slate-950 px-4 py-2 border-t border-slate-800">
+            <div class="max-w-6xl mx-auto flex items-center gap-2 overflow-x-auto text-xs text-slate-300 no-scrollbar" id="category-bar">
+                <button onclick="filterCategory('All')" class="px-4 py-1.5 bg-emerald-600 text-white font-bold rounded-full whitespace-nowrap cat-btn shadow-sm" data-i18n="cat_all">All</button>
+                <button onclick="filterCategory('Supermarket')" class="px-4 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-full whitespace-nowrap cat-btn shadow-sm" data-i18n="cat_super">🛒 Supermarket</button>
+                <button onclick="filterCategory('Electronics')" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 font-medium rounded-full whitespace-nowrap cat-btn transition" data-i18n="cat_elec">📱 Electronics</button>
+                <button onclick="filterCategory('Groceries')" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 font-medium rounded-full whitespace-nowrap cat-btn transition" data-i18n="cat_groc">🥑 Groceries</button>
+                <button onclick="filterCategory('Fashion')" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 font-medium rounded-full whitespace-nowrap cat-btn transition" data-i18n="cat_fash">👟 Fashion</button>
+                <button onclick="filterCategory('Home')" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 font-medium rounded-full whitespace-nowrap cat-btn transition" data-i18n="cat_home">🏠 Home & Kitchen</button>
+            </div>
+        </nav>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-4 space-y-6">
+
+        <!-- Hidden Admin Control Panel -->
+        <section id="admin-panel" class="hidden bg-white p-6 rounded-3xl shadow-xl border-2 border-amber-400">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-base font-black text-slate-900" data-i18n="admin_title">➕ Ongeza Igicuruzwa Gishya (Admin Panel)</h2>
+                <button onclick="toggleAdminMode()" class="text-xs bg-rose-100 text-rose-700 font-bold px-3 py-1 rounded-full">Kufunga Admin ✕</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input type="text" id="pName" placeholder="Izina ry'igicuruzwa" class="p-3 border border-slate-300 rounded-xl text-sm w-full outline-none focus:ring-2 focus:ring-emerald-500">
+                <input type="number" id="pPrice" placeholder="Igiciro (muri RWF)" class="p-3 border border-slate-300 rounded-xl text-sm w-full outline-none focus:ring-2 focus:ring-emerald-500">
+                <select id="pCat" class="p-3 border border-slate-300 rounded-xl text-sm w-full outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="Supermarket">🛒 Supermarket</option>
+                    <option value="Electronics">Electronics</option>
+                    <option value="Groceries">Groceries</option>
+                    <option value="Fashion">Fashion</option>
+                    <option value="Home">Home & Kitchen</option>
+                </select>
+                <input type="url" id="pImg" placeholder="Link y'ifoto (URL)" class="p-3 border border-slate-300 rounded-xl text-sm w-full outline-none focus:ring-2 focus:ring-emerald-500">
+                <button onclick="uploadToFirebase()" class="bg-emerald-600 text-white font-black py-3 rounded-xl col-span-1 sm:col-span-2 hover:bg-emerald-700 transition uppercase tracking-wider text-xs shadow-md" data-i18n="admin_pub">Publish Igicuruzwa</button>
+            </div>
+        </section>
+
+        <!-- Product Grid -->
+        <section class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200/60">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-black text-slate-900" id="catalog-title" data-i18n="products_title">Ibicuruzwa Biriho</h2>
+                <span id="product-count" class="text-xs bg-emerald-50 text-emerald-700 font-bold px-3 py-1 rounded-full border border-emerald-200">0 Items</span>
+            </div>
+            <div id="product-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <p class="col-span-full text-center py-8 text-slate-400 font-bold text-xs" data-i18n="loading">Ibicuruzwa biriko biratunda...</p>
+            </div>
+        </section>
+
+        <!-- Shopping Cart Overview -->
+        <section class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200/60 space-y-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-black text-slate-900" data-i18n="cart_title">Shopping Cart 🛒</h2>
+                <span id="cart-count" class="text-xs bg-amber-500 text-slate-950 font-black px-3 py-1 rounded-full shadow-sm">0</span>
+            </div>
+
+            <div id="cart-items" class="divide-y divide-slate-100 text-xs text-slate-700 max-h-48 overflow-y-auto">
+                <p class="py-2 text-slate-400 italic" data-i18n="cart_empty">Cart yawe irarangiye.</p>
+            </div>
+
+            <div class="flex justify-between items-center pt-3 font-black text-sm border-t border-slate-100 text-slate-900">
+                <span data-i18n="cart_total">Igiteranyo Yose:</span>
+                <span id="cart-total" class="text-emerald-600 text-lg font-black">0 RWF</span>
+            </div>
+
+            <!-- Proceed to Checkout Button -->
+            <button onclick="openCheckoutModal()" class="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-amber-400 font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg transition text-sm uppercase tracking-wider border border-slate-700" data-i18n="checkout_btn">
+                🛍 Komeza Kwishyura / Proceed to Checkout
+            </button>
+        </section>
+
+    </main>
+
+    <!-- Hidden Checkout Modal Window -->
+    <div id="checkout-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto relative border border-slate-100">
+            <button onclick="closeCheckoutModal()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-800 font-black text-xl">✕</button>
+
+            <h3 class="text-lg font-black text-slate-900 flex items-center gap-2" data-i18n="modal_title">
+                📦 Complete Your Order
+            </h3>
+
+            <!-- Customer Details Form -->
+            <div class="space-y-3 border-t border-slate-100 pt-3">
+                <label class="block text-xs font-bold text-slate-700" data-i18n="cust_label">1. Amakuru y'Umuguzi</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <input type="text" id="cust-name" data-i18n-placeholder="name_ph" placeholder="Izina ryawe ryose" class="p-3 border border-slate-200 rounded-xl text-xs w-full outline-none focus:ring-2 focus:ring-emerald-500">
+                    <input type="tel" id="cust-phone" data-i18n-placeholder="phone_ph" placeholder="Nimero ya Telefone (MoMo)" class="p-3 border border-slate-200 rounded-xl text-xs w-full outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+            </div>
+
+            <!-- MoMo Payment Info -->
+            <div class="bg-emerald-50/70 border border-emerald-200 p-3.5 rounded-2xl text-xs text-emerald-950 space-y-1">
+                <p class="font-black text-emerald-900" data-i18n="momo_title">💳 Kwishyura kuri Mobile Money:</p>
+                <p data-i18n="momo_desc">Ushobora kwishyura ukoresheje MoMo kuri **+250780073151**.</p>
+            </div>
+
+            <!-- GPS Location map inside Checkout Modal -->
+            <div class="space-y-2 border-t border-slate-100 pt-3">
+                <label class="block text-xs font-bold text-slate-700" data-i18n="gps_label">2. Hitamo Aho Uherereye (GPS Location)</label>
+                <div class="flex gap-2">
+                    <button type="button" onclick="getLocation()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 transition shadow-sm" data-i18n="gps_btn">
+                        📍 Auto Detect GPS
+                    </button>
+                    <span id="location-status" class="text-xs text-slate-500 self-center font-medium"></span>
+                </div>
+                <div id="map" class="h-40 w-full rounded-2xl border border-slate-200 mt-2"></div>
+            </div>
+
+            <!-- WhatsApp Order Submit Button -->
+            <button onclick="sendWhatsAppOrder()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl text-sm transition uppercase tracking-wider" data-i18n="wa_btn">
+                📲 Ohereza Oda kuri WhatsApp (+250780073151)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Password Protected Secret Trigger for Admin Mode
+        const ADMIN_PASSWORD = "UwaMAHOro 20!";
+        let logoClickCount = 0;
+        let logoClickTimer;
+
+        function handleSecretClick() {
+            logoClickCount++;
+            clearTimeout(logoClickTimer);
+            if (logoClickCount === 3) {
+                requestAdminAccess();
+                logoClickCount = 0;
+            }
+            logoClickTimer = setTimeout(() => { logoClickCount = 0; }, 1000);
+        }
+
+        function checkSecretSearch() {
+            const val = document.getElementById('search-input').value.trim();
+            if (val === 'admin123' || val === ADMIN_PASSWORD) {
+                document.getElementById('search-input').value = '';
+                requestAdminAccess(val);
+            }
+        }
+
+        function requestAdminAccess(providedPass = "") {
+            let pass = providedPass;
+            if (!pass) {
+                pass = prompt("Injiza Password ya Admin:");
+            }
+            
+            if (pass === ADMIN_PASSWORD) {
+                toggleAdminMode();
+                showToast("🔑 Admin Mode Yafungutse neza!");
+            } else if (pass !== null) {
+                alert("Password siyo!");
+            }
+        }
+
+        // Dictionary for Language Translation
+        const translations = {
+            rw: {
+                search_ph: "Shakisha ibicuruzwa kuri OB shop...",
+                cat_all: "All",
+                cat_super: "🛒 Supermarket",
+                cat_elec: "📱 Electronics",
+                cat_groc: "🥑 Groceries",
+                cat_fash: "👟 Fashion",
+                cat_home: "🏠 Home & Kitchen",
+                admin_title: "➕ Ongeza Igicuruzwa Gishya (Admin Panel)",
+                admin_pub: "Publish Igicuruzwa",
+                products_title: "Ibicuruzwa Biriho",
+                loading: "Ibicuruzwa biriko biratunda...",
+                cart_title: "Shopping Cart 🛒",
+                cart_empty: "Cart yawe irarangiye.",
+                cart_total: "Igiteranyo Yose:",
+                checkout_btn: "🛍️ Komeza Kwishyura / Proceed to Checkout",
+                modal_title: "📦 Complete Your Order",
+                cust_label: "1. Amakuru y'Umuguzi",
+                name_ph: "Izina ryawe ryose",
+                phone_ph: "Nimero ya Telefone (MoMo)",
+                momo_title: "💳 Kwishyura kuri Mobile Money:",
+                momo_desc: "Ushobora kwishyura ukoresheje MoMo kuri +250780073151.",
+                gps_label: "2. Hitamo Aho Uherereye (GPS Location)",
+                gps_btn: "📍 Auto Detect GPS",
+                wa_btn: "📲 Ohereza Oda kuri WhatsApp (+250780073151)",
+                toast_add: "✓ Igicuruzwa cyongewe muri Cart!"
+            },
+            en: {
+                search_ph: "Search products at OB shop...",
+                cat_all: "All",
+                cat_super: "🛒 Supermarket",
+                cat_elec: "📱 Electronics",
+                cat_groc: "🥑 Groceries",
+                cat_fash: "👟 Fashion",
+                cat_home: "🏠 Home & Kitchen",
+                admin_title: "➕ Add New Product (Admin Panel)",
+                admin_pub: "Publish Product",
+                products_title: "Available Products",
+                loading: "Loading products...",
+                cart_title: "Shopping Cart 🛒",
+                cart_empty: "Your cart is empty.",
+                cart_total: "Total Amount:",
+                checkout_btn: "🛍️ Proceed to Checkout",
+                modal_title: "📦 Complete Your Order",
+                cust_label: "1. Customer Information",
+                name_ph: "Your Full Name",
+                phone_ph: "Phone Number (MoMo)",
+                momo_title: "💳 Mobile Money Payment:",
+                momo_desc: "You can pay via MoMo to +250780073151.",
+                gps_label: "2. Delivery GPS Location",
+                gps_btn: "📍 Auto Detect GPS",
+                wa_btn: "📲 Send Order via WhatsApp (+250780073151)",
+                toast_add: "✓ Product added to Cart!"
+            }
+        };
+
+        let currentLang = 'rw';
+
+        function changeLanguage() {
+            currentLang = document.getElementById('lang-select').value;
+            const langData = translations[currentLang];
+
+            document.querySelectorAll('[data-i18n]').forEach(elem => {
+                const key = elem.getAttribute('data-i18n');
+                if (langData[key]) elem.innerText = langData[key];
+            });
+
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(elem => {
+                const key = elem.getAttribute('data-i18n-placeholder');
+                if (langData[key]) elem.placeholder = langData[key];
+            });
+
+            renderProducts();
+            renderCart();
+        }
+
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyB5XSJEh_5J-mDVpEyY9zBrQ_tpAeglxMk",
+            authDomain: "ob--shop.firebaseapp.com",
+            projectId: "ob--shop",
+            databaseURL: "https://ob--shop-default-rtdb.firebaseio.com/",
+            storageBucket: "ob--shop.firebasestorage.app",
+            messagingSenderId: "655220839778",
+            appId: "1:655220839778:web:17f5e1d973d689eeda083b"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let firebaseProducts = [];
+        let selectedCategory = 'All';
+        let currentCurrency = 'RWF';
+        const exchangeRate = 1300;
+        let cart = [];
+        let userLocation = { lat: -1.9441, lng: 30.0619 };
+        let isAdmin = false;
+        let map, marker, mapInitialized = false;
+
+        const defaultProducts = [
+            { id: 's1', name: "Fanta Orange 300ml", price: 600, category: "Supermarket", img: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=500&q=80" },
+            { id: 's2', name: "Pringles Potato Chips", price: 3500, category: "Supermarket", img: "https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=500&q=80" },
+            { id: 's3', name: "Fresh Sliced Bread (Umukati)", price: 1200, category: "Supermarket", img: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=500&q=80" },
+            { id: 's4', name: "Chocolate Biscuits", price: 1000, category: "Supermarket", img: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=500&q=80" },
+            { id: 's5', name: "Fresh Amandazi (4 Pcs)", price: 500, category: "Supermarket", img: "https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?w=500&q=80" },
+            { id: 'd1', name: "Smart TV 55 inch 4K Ultra HD", price: 450000, category: "Electronics", img: "https://images.unsplash.com/photo-1593784991095-a205069470b6?w=500&q=80" },
+            { id: 'd2', name: "Apple iPhone 15 Pro Max", price: 1350000, category: "Electronics", img: "https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=500&q=80" }
+        ];
+
+        db.ref('products').on('value', (snapshot) => {
+            firebaseProducts = [];
+            snapshot.forEach((child) => {
+                firebaseProducts.push({ key: child.key, ...child.val() });
+            });
+            renderProducts();
+        });
+
+        function uploadToFirebase() {
+            const name = document.getElementById('pName').value;
+            const price = parseFloat(document.getElementById('pPrice').value);
+            const category = document.getElementById('pCat').value;
+            const img = document.getElementById('pImg').value;
+
+            if (name && price && category && img) {
+                db.ref('products').push({ name, price, category, img });
+                showToast("✓ Igicuruzwa cyongewe muri Database!");
+                document.getElementById('pName').value = '';
+                document.getElementById('pPrice').value = '';
+                document.getElementById('pImg').value = '';
+            } else {
+                alert("Uzuza imyanya yose!");
+            }
+        }
+
+        function deleteFromFirebase(key) {
+            if (confirm("Wifuza gusiba iki gicuruzwa?")) {
+                db.ref('products/' + key).remove();
+                showToast("Igicuruzwa cyasibwe!");
+            }
+        }
+
+        function changeCurrency() {
+            currentCurrency = document.getElementById('currency-select').value;
+            renderProducts();
+            renderCart();
+        }
+
+        function formatPrice(priceRwf) {
+            if (currentCurrency === 'USD') {
+                return `$${(priceRwf / exchangeRate).toFixed(2)}`;
+            }
+            return `${priceRwf.toLocaleString()} RWF`;
+        }
+
+        function filterCategory(cat) {
+            selectedCategory = cat;
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('bg-emerald-600', 'text-white', 'font-bold', 'bg-amber-500', 'text-slate-950');
+                btn.classList.add('bg-slate-800', 'hover:bg-slate-700', 'font-medium', 'text-slate-300');
+                if (btn.innerText.includes(cat) || (cat === 'All' && btn.innerText.includes('All'))) {
+                    btn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'font-medium', 'text-slate-300');
+                    if (cat === 'Supermarket') {
+                        btn.classList.add('bg-amber-500', 'text-slate-950', 'font-bold');
+                    } else {
+                        btn.classList.add('bg-emerald-600', 'text-white', 'font-bold');
+                    }
+                }
+            });
+            renderProducts();
+        }
+
+        function renderProducts() {
+            const container = document.getElementById('product-list');
+            const searchWord = document.getElementById('search-input').value.toLowerCase();
+            container.innerHTML = '';
+
+            const allItems = firebaseProducts.length > 0 ? firebaseProducts : defaultProducts;
+
+            const filtered = allItems.filter(p => {
+                const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
+                const matchesSearch = p.name.toLowerCase().includes(searchWord);
+                return matchesCategory && matchesSearch;
+            });
+
+            document.getElementById('product-count').innerText = `${filtered.length} Items`;
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-8 text-slate-400 text-xs">Nta gicuruzwa gihuye n'ibyo ushakisha.</div>`;
+                return;
+            }
+
+            filtered.forEach(p => {
+                container.innerHTML += `
+                    <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-xs hover:shadow-lg transition bg-white flex flex-col justify-between group">
+                        <div class="overflow-hidden">
+                            <img src="${p.img}" alt="${p.name}" class="h-28 sm:h-36 w-full object-cover group-hover:scale-105 transition duration-300">
+                        </div>
+                        <div class="p-3 flex-1 flex flex-col justify-between">
+                            <div>
+                                <span class="text-[9px] font-bold uppercase ${p.category === 'Supermarket' ? 'text-amber-800 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-100'} px-2 py-0.5 rounded-full border">${p.category || 'General'}</span>
+                                <h3 class="font-bold text-slate-900 text-xs mt-1.5 line-clamp-2">${p.name}</h3>
+                                <p class="text-emerald-600 font-black text-xs mt-1">${formatPrice(p.price)}</p>
+                            </div>
+                            <div class="mt-2.5 flex gap-1">
+                                <button onclick="addToCart('${p.name}', ${p.price}, '${p.category || 'General'}')" class="flex-1 bg-slate-900 hover:bg-emerald-600 text-amber-400 hover:text-white text-[11px] font-black py-2 rounded-xl transition shadow-xs">+ Cart</button>
+                                ${isAdmin && p.key ? `<button onclick="deleteFromFirebase('${p.key}')" class="bg-rose-600 text-white text-xs px-2.5 rounded-xl hover:bg-rose-700">✕</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function addToCart(name, price, category) {
+            cart.push({ name, price, category });
+            showToast(translations[currentLang].toast_add);
+            renderCart();
+        }
+
+        function renderCart() {
+            const cartDiv = document.getElementById('cart-items');
+            const totalSpan = document.getElementById('cart-total');
+            document.getElementById('cart-count').innerText = cart.length;
+
+            if (cart.length === 0) {
+                cartDiv.innerHTML = `<p class="py-2 text-slate-400 italic">${translations[currentLang].cart_empty}</p>`;
+                totalSpan.innerText = formatPrice(0);
+                return;
+            }
+
+            cartDiv.innerHTML = cart.map((item, index) => `
+                <div class="flex justify-between py-2 items-center">
+                    <div>
+                        <span class="font-medium text-slate-800">${item.name}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-emerald-600">${formatPrice(item.price)}</span>
+                        <button onclick="removeFromCart(${index})" class="text-rose-500 font-bold px-1 hover:text-rose-700">✕</button>
+                    </div>
+                </div>
+            `).join('');
+
+            const total = cart.reduce((sum, item) => sum + item.price, 0);
+            totalSpan.innerText = formatPrice(total);
+        }
+
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            renderCart();
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 3000);
+        }
+
+        function toggleAdminMode() {
+            isAdmin = !isAdmin;
+            document.getElementById('admin-panel').classList.toggle('hidden', !isAdmin);
+            renderProducts();
+        }
+
+        function openCheckoutModal() {
+            if (cart.length === 0) {
+                alert("Nyamuneka banza wonsere igicuruzwa kimwe muri Cart!");
+                return;
+            }
+            document.getElementById('checkout-modal').classList.remove('hidden');
+            if (!mapInitialized) {
+                setTimeout(initMap, 200);
+            }
+        }
+
+        function closeCheckoutModal() {
+            document.getElementById('checkout-modal').classList.add('hidden');
+        }
+
+        function initMap() {
+            if (mapInitialized) return;
+            map = L.map('map').setView([userLocation.lat, userLocation.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            marker = L.marker([userLocation.lat, userLocation.lng]).addTo(map)
+                .bindPopup('Delivery Location').openPopup();
+            mapInitialized = true;
+        }
+
+        function getLocation() {
+            const status = document.getElementById('location-status');
+            if (navigator.geolocation) {
+                status.innerText = "Locating GPS...";
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation.lat = position.coords.latitude;
+                        userLocation.lng = position.coords.longitude;
+                        if (map) {
+                            map.setView([userLocation.lat, userLocation.lng], 16);
+                            marker.setLatLng([userLocation.lat, userLocation.lng])
+                                .bindPopup('Location yawe').openPopup();
+                        }
+                        status.innerText = "Location Updated! ✅";
+                    },
+                    () => { status.innerText = "Ntabwo tubonye GPS."; }
+                );
+            } else {
+                status.innerText = "Geolocation not supported.";
+            }
+        }
+
+        function sendWhatsAppOrder() {
+            const custName = document.getElementById('cust-name').value || "Umuguzi";
+            const custPhone = document.getElementById('cust-phone').value || "Nta Nimero";
+
+            let message = `🛒 *NEW ORDER - OB shop*\n\n`;
+            message += `👤 *Umuguzi / Customer:* ${custName}\n`;
+            message += `📞 *Telefone / Phone:* ${custPhone}\n\n`;
+            message += `📦 *Ibicuruzwa / Products:* \n`;
+
+            cart.forEach((item, i) => {
+                message += `${i + 1}. ${item.name} - ${formatPrice(item.price)}\n`;
+            });
+
+            const total = cart.reduce((sum, item) => sum + item.price, 0);
+            message += `\n💰 *Igiteranyo / Total:* ${formatPrice(total)}\n`;
+            message += `📍 *Delivery GPS Location:* https://maps.google.com/?q=${userLocation.lat},${userLocation.lng}`;
+
+            const phone = "250780073151";
+            const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank');
+        }
+    </script>
+</body>
+</html>
